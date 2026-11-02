@@ -1,6 +1,6 @@
 # Groupe Lien Togo
 
-Services pour la diaspora et les familles au Togo, et location d'engins lourds.
+Services pour la diaspora et les familles au Togo.
 
 Siège social : Lomé, Togo
 
