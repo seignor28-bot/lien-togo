@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Espace gestion - Groupe Lien Togo</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; background: #f1f5f2; color: #222; }
+  header { background: #166534; color: #fff; padding: 16px; text-align: center; }
+  main { padding: 14px; max-width: 520px; margin: auto; }
+  .carte { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+  label { display: block; margin: 10px 0 6px; font-weight: bold; }
+  input { width: 100%; box-sizing: border-box; padding: 12px; font-size: 16px; border: 1px solid #cbd5e1; border-radius: 8px; }
+  button { width: 100%; margin-top: 14px; padding: 13px; font-size: 16px; border: 0; border-radius: 8px; background: #16a34a; color: #fff; }
+  button.gris { background: #64748b; }
+  .ligne { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid #e5e7eb; padding: 10px 0; font-size: 15px; }
+  .ligne:first-child { border-top: 0; }
+  .erreur { color: #b91c1c; font-weight: bold; }
+  .ok { color: #166534; font-weight: bold; }
+</style>
+</head>
+<body>
+<header>
+  <strong>Groupe Lien Togo</strong><br>
+  <small>Espace gestion</small>
+</header>
+<main>
+  <div class="carte" id="connexion">
+    <label for="email">E-mail</label>
+    <input id="email" type="email" autocomplete="username">
+    <label for="mdp">Mot de passe</label>
+    <input id="mdp" type="password" autocomplete="current-password">
+    <button id="entrer">Se connecter</button>
+  </div>
+  <div class="carte" id="espace" style="display:none">
+    <div id="infos"></div>
+    <button id="sortir" class="gris">Se déconnecter</button>
+  </div>
+  <p id="msg"></p>
+</main>
+
+<script type="module">
+import { auth, db, ENTREPRISE } from "./gt-config.js";
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
+import { doc, getDoc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+
+var msg = document.getElementById("msg");
+var connexion = document.getElementById("connexion");
+var espace = document.getElementById("espace");
+var infos = document.getElementById("infos");
+
+function dire(texte, classe) {
+  msg.textContent = texte;
+  msg.className = classe || "";
+}
+
+function ligne(nom, valeur) {
+  var d = document.createElement("div");
+  d.className = "ligne";
+  var a = document.createElement("span");
+  a.textContent = nom;
+  var b = document.createElement("strong");
+  b.textContent = valeur;
+  d.appendChild(a);
+  d.appendChild(b);
+  return d;
+}
+
+async function entrer() {
+  var email = document.getElementById("email").value.trim();
+  var mdp = document.getElementById("mdp").value;
+  if (!email || !mdp) {
+    dire("Écris ton e-mail et ton mot de passe.", "erreur");
+    return;
+  }
+  dire("Connexion en cours...", "");
+  try {
+    await signInWithEmailAndPassword(auth, email, mdp);
+  } catch (e) {
+    if (e.code === "auth/too-many-requests") {
+      dire("Trop d'essais. Attends quelques minutes.", "erreur");
+    } else {
+      dire("E-mail ou mot de passe incorrect.", "erreur");
+    }
+  }
+}
+
+onAuthStateChanged(auth, async function (user) {
+  if (!user) {
+    espace.style.display = "none";
+    connexion.style.display = "block";
+    return;
+  }
+  connexion.style.display = "none";
+  espace.style.display = "block";
+  infos.textContent = "";
+  dire("Vérification de ton accès...", "");
+  try {
+    var membre = await getDoc(doc(db, "entreprises", ENTREPRISE, "membres", user.uid));
+    if (!membre.exists()) {
+      dire("Ce compte n'a pas accès à l'espace gestion.", "erreur");
+      await signOut(auth);
+      return;
+    }
+    var entreprise = await getDoc(doc(db, "entreprises", ENTREPRISE));
+    var role = membre.data().role;
+    var etiquette = role === "dg" ? "Directeur Général" : String(role);
+    infos.appendChild(ligne("Compte", user.email));
+    infos.appendChild(ligne("Entreprise", entreprise.exists() ? entreprise.data().nom : "-"));
+    infos.appendChild(ligne("Rôle", etiquette));
+    dire("Accès confirmé.", "ok");
+  } catch (e) {
+    dire("Accès refusé par les règles de sécurité.", "erreur");
+  }
+});
+
+document.getElementById("entrer").onclick = entrer;
+document.getElementById("sortir").onclick = function () { signOut(auth); };
+</script>
+</body>
+</html>
