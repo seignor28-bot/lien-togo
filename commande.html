@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Commander - Groupe Lien Togo</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; background: #f1f5f2; color: #222; }
+  header { background: #166534; color: #fff; padding: 16px; text-align: center; }
+  main { padding: 14px; max-width: 520px; margin: auto; }
+  .carte { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+  h2 { margin: 0 0 8px; font-size: 18px; }
+  label { display: block; margin: 12px 0 6px; font-weight: bold; }
+  input, select, textarea { width: 100%; box-sizing: border-box; padding: 12px; font-size: 16px; border: 1px solid #cbd5e1; border-radius: 8px; font-family: inherit; }
+  textarea { min-height: 110px; }
+  button { width: 100%; margin-top: 14px; padding: 13px; font-size: 16px; border: 0; border-radius: 8px; background: #16a34a; color: #fff; }
+  button.gris { background: #64748b; }
+  button:disabled { opacity: .6; }
+  .ligne { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid #e5e7eb; padding: 10px 0; font-size: 15px; }
+  .ligne:first-child { border-top: 0; }
+  .erreur { color: #b91c1c; font-weight: bold; }
+  .ok { color: #166534; font-weight: bold; }
+  small { color: #55615a; }
+</style>
+</head>
+<body>
+<header>
+  <strong>Groupe Lien Togo</strong><br>
+  <small style="color:#fff">Passer une commande</small>
+</header>
+<main>
+
+  <div class="carte" id="acces">
+    <h2>Connexion ou création de compte</h2>
+    <label for="email">E-mail</label>
+    <input id="email" type="email" autocomplete="username">
+    <label for="mdp">Mot de passe (6 caractères minimum)</label>
+    <input id="mdp" type="password" autocomplete="current-password">
+    <button id="entrer">Se connecter</button>
+    <button id="creer" class="gris">Créer mon compte</button>
+    <button id="oubli" class="gris">Mot de passe oublié</button>
+  </div>
+
+  <div class="carte" id="verif" style="display:none">
+    <h2>Vérifie ton e-mail</h2>
+    <p>Nous t'avons envoyé un lien de vérification. Ouvre-le, puis reviens ici. Pense à regarder dans les courriers indésirables.</p>
+    <button id="dejafait">J'ai vérifié mon e-mail</button>
+    <button id="renvoyer" class="gris">Renvoyer le lien</button>
+    <button id="sortir1" class="gris">Se déconnecter</button>
+  </div>
+
+  <div id="espace" style="display:none">
+    <div class="carte">
+      <h2>Nouvelle commande</h2>
+      <label for="nom">Ton nom</label>
+      <input id="nom" type="text" maxlength="80" autocomplete="name">
+      <label for="tel">Ton numéro WhatsApp (avec l'indicatif)</label>
+      <input id="tel" type="tel" maxlength="30" autocomplete="tel">
+      <label for="service">Service</label>
+      <select id="service">
+        <option value="Aide à la famille">Aide à la famille</option>
+        <option value="Suivi de chantier">Suivi de chantier</option>
+        <option value="Démarche administrative">Démarche administrative</option>
+        <option value="Surprise cadeau à Lomé">Surprise cadeau à Lomé</option>
+        <option value="Autre">Autre</option>
+      </select>
+      <label for="description">Décris ce dont tu as besoin</label>
+      <textarea id="description" maxlength="1500"></textarea>
+      <label for="budget">Ton budget (facultatif)</label>
+      <input id="budget" type="text" maxlength="50" placeholder="Exemple : 100 €">
+      <button id="envoyer">Envoyer ma commande</button>
+      <small>Tu recevras un devis clair sur WhatsApp avant tout paiement.</small>
+    </div>
+    <div class="carte">
+      <h2>Mes commandes</h2>
+      <div id="liste">Chargement...</div>
+    </div>
+    <div class="carte">
+      <div id="qui"></div>
+      <button id="sortir2" class="gris">Se déconnecter</button>
+    </div>
+  </div>
+
+  <p id="msg"></p>
+</main>
+
+<script type="module">
+import { auth, db, ENTREPRISE } from "./gt-config.js";
+import {
+  createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification,
+  sendPasswordResetEmail, signOut, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
+import {
+  collection, addDoc, getDocs, query, where, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+
+var msg = document.getElementById("msg");
+var acces = document.getElementById("acces");
+var verif = document.getElementById("verif");
+var espace = document.getElementById("espace");
+var liste = document.getElementById("liste");
+
+function dire(texte, classe) {
+  msg.textContent = texte;
+  msg.className = classe || "";
+}
+
+function montrer(quoi) {
+  acces.style.display = quoi === "acces" ? "block" : "none";
+  verif.style.display = quoi === "verif" ? "block" : "none";
+  espace.style.display = quoi === "espace" ? "block" : "none";
+}
+
+function erreurAuth(e) {
+  var c = e && e.code ? e.code : "";
+  if (c === "auth/email-already-in-use") return "Cet e-mail a déjà un compte. Connecte-toi.";
+  if (c === "auth/weak-password") return "Mot de passe trop court (6 caractères minimum).";
+  if (c === "auth/invalid-email") return "Cet e-mail n'est pas valide.";
+  if (c === "auth/too-many-requests") return "Trop d'essais. Attends quelques minutes.";
+  if (c === "auth/network-request-failed") return "Pas de connexion internet. Réessaie.";
+  return "E-mail ou mot de passe incorrect.";
+}
+
+function identifiants() {
+  var email = document.getElementById("email").value.trim();
+  var mdp = document.getElementById("mdp").value;
+  if (!email || !mdp) {
+    dire("Écris ton e-mail et ton mot de passe.", "erreur");
+    return null;
+  }
+  return { email: email, mdp: mdp };
+}
+
+document.getElementById("entrer").onclick = async function () {
+  var i = identifiants();
+  if (!i) return;
+  dire("Connexion en cours...", "");
+  try { await signInWithEmailAndPassword(auth, i.email, i.mdp); dire("", ""); }
+  catch (e) { dire(erreurAuth(e), "erreur"); }
+};
+
+document.getElementById("creer").onclick = async function () {
+  var i = identifiants();
+  if (!i) return;
+  dire("Création du compte...", "");
+  try {
+    var cred = await createUserWithEmailAndPassword(auth, i.email, i.mdp);
+    await sendEmailVerification(cred.user);
+    dire("Compte créé. Un lien de vérification vient d'être envoyé.", "ok");
+  } catch (e) { dire(erreurAuth(e), "erreur"); }
+};
+
+document.getElementById("oubli").onclick = async function () {
+  var email = document.getElementById("email").value.trim();
+  if (!email) { dire("Écris d'abord ton e-mail ci-dessus.", "erreur"); return; }
+  try {
+    await sendPasswordResetEmail(auth, email);
+    dire("Si ce compte existe, un lien de réinitialisation a été envoyé.", "ok");
+  } catch (e) { dire("Impossible d'envoyer le lien. Vérifie l'e-mail.", "erreur"); }
+};
+
+document.getElementById("dejafait").onclick = function () { location.reload(); };
+
+document.getElementById("renvoyer").onclick = async function () {
+  try {
+    await sendEmailVerification(auth.currentUser);
+    dire("Lien renvoyé. Regarde aussi les courriers indésirables.", "ok");
+  } catch (e) { dire("Attends une minute avant de redemander un lien.", "erreur"); }
+};
+
+document.getElementById("sortir1").onclick = function () { signOut(auth); };
+document.getElementById("sortir2").onclick = function () { signOut(auth); };
+
+function ligne(nom, valeur) {
+  var d = document.createElement("div");
+  d.className = "ligne";
+  var a = document.createElement("span");
+  a.textContent = nom;
+  var b = document.createElement("strong");
+  b.textContent = valeur;
+  d.appendChild(a);
+  d.appendChild(b);
+  return d;
+}
+
+function etiquette(statut) {
+  if (statut === "nouvelle") return "Reçue";
+  return String(statut || "-");
+}
+
+async function charger() {
+  liste.textContent = "Chargement...";
+  try {
+    var q = query(
+      collection(db, "entreprises", ENTREPRISE, "commandes"),
+      where("clientUid", "==", auth.currentUser.uid)
+    );
+    var res = await getDocs(q);
+    var items = [];
+    res.forEach(function (d) { items.push(d.data()); });
+    items.sort(function (a, b) {
+      var x = a.creeLe && a.creeLe.toMillis ? a.creeLe.toMillis() : 0;
+      var y = b.creeLe && b.creeLe.toMillis ? b.creeLe.toMillis() : 0;
+      return y - x;
+    });
+    liste.textContent = "";
+    if (items.length === 0) {
+      liste.textContent = "Aucune commande pour le moment.";
+      return;
+    }
+    items.forEach(function (c) {
+      var bloc = document.createElement("div");
+      bloc.style.borderTop = "1px solid #e5e7eb";
+      bloc.style.padding = "10px 0";
+      var date = c.creeLe && c.creeLe.toDate ? c.creeLe.toDate().toLocaleString("fr-FR") : "";
+      bloc.appendChild(ligne(String(c.service || ""), etiquette(c.statut)));
+      var p = document.createElement("small");
+      p.textContent = date;
+      bloc.appendChild(p);
+      liste.appendChild(bloc);
+    });
+  } catch (e) {
+    liste.textContent = "Impossible de charger tes commandes.";
+  }
+}
+
+document.getElementById("envoyer").onclick = async function () {
+  var bouton = document.getElementById("envoyer");
+  var service = document.getElementById("service").value;
+  var description = document.getElementById("description").value.trim();
+  if (description.length < 10) {
+    dire("Décris ta demande en quelques phrases.", "erreur");
+    return;
+  }
+  bouton.disabled = true;
+  dire("Envoi en cours...", "");
+  try {
+    await addDoc(collection(db, "entreprises", ENTREPRISE, "commandes"), {
+      clientUid: auth.currentUser.uid,
+      clientEmail: auth.currentUser.email,
+      clientNom: document.getElementById("nom").value.trim(),
+      telephone: document.getElementById("tel").value.trim(),
+      service: service,
+      description: description,
+      budget: document.getElementById("budget").value.trim(),
+      statut: "nouvelle",
+      creeLe: serverTimestamp()
+    });
+    document.getElementById("description").value = "";
+    dire("Commande envoyée. Nous t'écrivons sur WhatsApp avec un devis.", "ok");
+    charger();
+  } catch (e) {
+    dire("Envoi impossible. Vérifie ta connexion et réessaie.", "erreur");
+  }
+  bouton.disabled = false;
+};
+
+onAuthStateChanged(auth, async function (user) {
+  if (!user) { montrer("acces"); return; }
+  try {
+    await user.reload();
+    if (!user.emailVerified) { montrer("verif"); return; }
+    await user.getIdToken(true);
+    document.getElementById("qui").textContent = "Connecté : " + user.email;
+    montrer("espace");
+    charger();
+  } catch (e) {
+    montrer("acces");
+    dire("Reconnecte-toi.", "erreur");
+  }
+});
+</script>
+</body>
+</html>
