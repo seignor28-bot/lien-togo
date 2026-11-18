@@ -19,6 +19,7 @@
   button:disabled { opacity: .6; }
   .ligne { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid #e5e7eb; padding: 10px 0; font-size: 15px; }
   .ligne:first-child { border-top: 0; }
+  .desc { background: #f8fafc; border-radius: 8px; padding: 10px; margin: 6px 0; font-size: 15px; white-space: pre-wrap; word-break: break-word; }
   .erreur { color: #b91c1c; font-weight: bold; }
   .ok { color: #166534; font-weight: bold; }
   small { color: #55615a; }
@@ -70,11 +71,12 @@
       <label for="budget">Ton budget (facultatif)</label>
       <input id="budget" type="text" maxlength="50" placeholder="Exemple : 100 €">
       <button id="envoyer">Envoyer ma commande</button>
-      <small>Tu recevras un devis clair sur WhatsApp avant tout paiement.</small>
+      <small>Tu recevras un devis clair avant tout paiement.</small>
     </div>
     <div class="carte">
       <h2>Mes commandes</h2>
       <div id="liste">Chargement...</div>
+      <button id="actualiser" class="gris">Actualiser</button>
     </div>
     <div class="carte">
       <div id="qui"></div>
@@ -100,6 +102,15 @@ var acces = document.getElementById("acces");
 var verif = document.getElementById("verif");
 var espace = document.getElementById("espace");
 var liste = document.getElementById("liste");
+
+var STATUTS = {
+  nouvelle: "Reçue",
+  devis_envoye: "Devis envoyé",
+  acompte_recu: "Acompte reçu",
+  en_cours: "En cours",
+  terminee: "Terminée",
+  annulee: "Annulée"
+};
 
 function dire(texte, classe) {
   msg.textContent = texte;
@@ -171,6 +182,7 @@ document.getElementById("renvoyer").onclick = async function () {
 
 document.getElementById("sortir1").onclick = function () { signOut(auth); };
 document.getElementById("sortir2").onclick = function () { signOut(auth); };
+document.getElementById("actualiser").onclick = function () { charger(); };
 
 function ligne(nom, valeur) {
   var d = document.createElement("div");
@@ -185,8 +197,7 @@ function ligne(nom, valeur) {
 }
 
 function etiquette(statut) {
-  if (statut === "nouvelle") return "Reçue";
-  return String(statut || "-");
+  return STATUTS[statut] || String(statut || "-");
 }
 
 async function charger() {
@@ -218,6 +229,20 @@ async function charger() {
       var p = document.createElement("small");
       p.textContent = date;
       bloc.appendChild(p);
+      if (c.devisMontant) {
+        bloc.appendChild(ligne("Devis", String(c.devisMontant)));
+        if (c.devisDetail) {
+          var dd = document.createElement("div");
+          dd.className = "desc";
+          dd.textContent = String(c.devisDetail);
+          bloc.appendChild(dd);
+        }
+        if (c.statut === "devis_envoye") {
+          var pa = document.createElement("small");
+          pa.textContent = "Pour accepter ce devis, réponds-nous sur WhatsApp.";
+          bloc.appendChild(pa);
+        }
+      }
       liste.appendChild(bloc);
     });
   } catch (e) {
