@@ -26,16 +26,27 @@
 <main>
   <div class="carte">
     <label for="code">Ton code de commande</label>
-    <input id="code" type="text" placeholder="Exemple : LT001" maxlength="30" autocomplete="off">
+    <input id="code" type="text" placeholder="Exemple : LT-ABC123" maxlength="30" autocomplete="off">
     <button id="voir">Voir ma commande</button>
   </div>
   <div class="carte" id="resultat" style="display:none"></div>
 </main>
 
-<script>
+<script type="module">
+import * as C from "./gt-config.js";
+import {initializeApp,getApps,getApp} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
+import {getFirestore,doc,getDoc} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+
 var SERVEUR = "https://script.google.com/macros/s/AKfycbxuJXFpRqRdMtiqXOiJir5caz419xH43k4nStrpDQPMvf2uU8vHtXpuK_am_7chRvrUTg/exec";
 var champ = document.getElementById("code");
 var zone = document.getElementById("resultat");
+
+var db = null;
+try {
+  var cfg = C.firebaseConfig || C.config || C.default;
+  var app = C.app || (getApps().length ? getApp() : initializeApp(cfg));
+  db = C.db || getFirestore(app);
+} catch (e) { db = null; }
 
 function ligne(nom, valeur) {
   var d = document.createElement("div");
@@ -67,6 +78,38 @@ function message(texte, erreur) {
   zone.appendChild(p);
 }
 
+async function voirFirestore(code) {
+  var s = await getDoc(doc(db, "entreprises", "lien-togo", "suivis", code));
+  if (!s.exists()) {
+    message("Code introuvable.", true);
+    return;
+  }
+  var d = s.data();
+  zone.textContent = "";
+  zone.appendChild(ligne("Code", code));
+  zone.appendChild(ligne("Service", d.service));
+  zone.appendChild(ligne("Statut", d.statut));
+  zone.appendChild(ligne("Acompte", d.acompte));
+  if (d.miseAJour && d.miseAJour.toDate) {
+    zone.appendChild(ligne("Mis à jour le", d.miseAJour.toDate().toLocaleDateString("fr-FR")));
+  }
+}
+
+async function voirFeuille(code) {
+  var r = await fetch(SERVEUR + "?code=" + encodeURIComponent(code));
+  var d = await r.json();
+  if (!d.ok) {
+    message(d.message || "Code introuvable.", true);
+    return;
+  }
+  zone.textContent = "";
+  zone.appendChild(ligne("Code", d.code));
+  zone.appendChild(ligne("Service", d.service));
+  zone.appendChild(ligne("Statut", d.statut));
+  zone.appendChild(ligne("Acompte", d.acompte));
+  zone.appendChild(ligne("Preuve", d.preuve));
+}
+
 async function voir() {
   var code = champ.value.trim().toUpperCase();
   if (code.length < 4) {
@@ -75,18 +118,11 @@ async function voir() {
   }
   message("Recherche en cours...", false);
   try {
-    var r = await fetch(SERVEUR + "?code=" + encodeURIComponent(code));
-    var d = await r.json();
-    if (!d.ok) {
-      message(d.message || "Code introuvable.", true);
-      return;
+    if (db && /^LT-[A-Z0-9]{6,12}$/.test(code)) {
+      await voirFirestore(code);
+    } else {
+      await voirFeuille(code);
     }
-    zone.textContent = "";
-    zone.appendChild(ligne("Code", d.code));
-    zone.appendChild(ligne("Service", d.service));
-    zone.appendChild(ligne("Statut", d.statut));
-    zone.appendChild(ligne("Acompte", d.acompte));
-    zone.appendChild(ligne("Preuve", d.preuve));
   } catch (e) {
     message("Erreur de connexion. Réessaie.", true);
   }
