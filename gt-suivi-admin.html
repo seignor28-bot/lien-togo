@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Suivi - Admin</title>
+<style>
+body{font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:16px;background:#f5f7fa}
+h1{font-size:20px}
+.box{background:#fff;border-radius:10px;padding:14px;margin:12px 0;box-shadow:0 1px 4px #0002}
+input,select,button{width:100%;padding:12px;margin:6px 0;font-size:16px;box-sizing:border-box}
+button{background:#0a7d3b;color:#fff;border:0;border-radius:8px}
+.cl{background:#eee;color:#000;margin:3px 0;text-align:left}
+#msg{padding:8px;font-weight:bold}
+.hide{display:none}
+</style></head><body>
+<h1>Suivi - Groupe Lien Togo</h1>
+<div id="msg"></div>
+
+<div id="login" class="box">
+<input id="em" type="email" placeholder="E-mail">
+<input id="pw" type="password" placeholder="Mot de passe">
+<button id="bLogin">Connexion</button>
+</div>
+
+<div id="panel" class="hide">
+<div class="box">
+<b>Nouveau suivi</b>
+<input id="nService" placeholder="Service (ex : Aide à la famille)">
+<button id="bCreer">Créer un suivi</button>
+</div>
+<div class="box">
+<b>Ouvrir un suivi</b>
+<input id="code" placeholder="Code (LT-XXXXXX)">
+<button id="bOuvrir">Ouvrir</button>
+</div>
+<div class="box hide" id="edit">
+<b id="titre"></b>
+<input id="service" placeholder="Service">
+<select id="statut">
+<option>Reçu</option><option>En cours</option><option>Terminé</option><option>Livré</option>
+</select>
+<select id="acompte">
+<option>Non payé</option><option>50 % payé</option><option>Payé</option>
+</select>
+<button id="bSave">Enregistrer</button>
+</div>
+<div class="box"><b>Mes codes (cet appareil)</b><div id="liste"></div></div>
+</div>
+
+<script type="module">
+import * as C from "./gt-config.js";
+import {initializeApp,getApps,getApp} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
+import {getAuth,signInWithEmailAndPassword} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
+import {getFirestore,doc,getDoc,setDoc} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+
+const cfg=C.firebaseConfig||C.config||C.default;
+const app=C.app||(getApps().length?getApp():initializeApp(cfg));
+const auth=C.auth||getAuth(app);
+const db=C.db||getFirestore(app);
+const $=id=>document.getElementById(id);
+const msg=t=>{$("msg").textContent=t};
+const ref=c=>doc(db,"entreprises","lien-togo","suivis",c);
+let current="";
+
+function codes(){try{return JSON.parse(localStorage.getItem("ltCodes")||"[]")}catch(e){return[]}}
+function saveCode(c){try{const l=codes().filter(x=>x!==c);l.unshift(c);localStorage.setItem("ltCodes",JSON.stringify(l.slice(0,50)))}catch(e){}}
+function showList(){
+  const d=$("liste");d.textContent="";
+  codes().forEach(c=>{const b=document.createElement("button");b.className="cl";b.textContent=c;b.onclick=()=>{$("code").value=c;ouvrir()};d.appendChild(b)});
+}
+function gen(){
+  const a="ABCDEFGHJKMNPQRSTUVWXYZ23456789";let s="";
+  const r=new Uint32Array(6);crypto.getRandomValues(r);
+  for(const x of r)s+=a[x%a.length];
+  return "LT-"+s;
+}
+async function ouvrir(){
+  const c=$("code").value.trim().toUpperCase();
+  if(!c)return msg("Écris un code.");
+  try{
+    const s=await getDoc(ref(c));
+    if(!s.exists())return msg("Code introuvable.");
+    const d=s.data();current=c;
+    $("titre").textContent=c;
+    $("service").value=d.service||"";
+    $("statut").value=d.statut||"Reçu";
+    $("acompte").value=d.acompte||"Non payé";
+    $("edit").classList.remove("hide");
+    saveCode(c);showList();msg("Suivi ouvert.");
+  }catch(e){msg("Erreur : "+e.code)}
+}
+$("bLogin").onclick=async()=>{
+  try{
+    const u=await signInWithEmailAndPassword(auth,$("em").value.trim(),$("pw").value);
+    const m=await getDoc(doc(db,"entreprises","lien-togo","membres",u.user.uid));
+    if(!m.exists()||m.data().role!=="dg"){msg("Accès refusé.");return}
+    $("login").classList.add("hide");$("panel").classList.remove("hide");
+    msg("Connecté (Directeur Général).");showList();
+  }catch(e){msg("Erreur : "+(e.code||e.message))}
+};
+$("bCreer").onclick=async()=>{
+  const service=$("nService").value.trim();
+  if(!service)return msg("Écris le service.");
+  const c=gen();
+  try{
+    await setDoc(ref(c),{service,statut:"Reçu",acompte:"Non payé",miseAJour:new Date().toISOString()});
+    saveCode(c);showList();$("code").value=c;$("nService").value="";
+    await ouvrir();msg("Suivi créé : "+c+" (donne ce code au client)");
+  }catch(e){msg("Erreur : "+e.code)}
+};
+$("bOuvrir").onclick=ouvrir;
+$("bSave").onclick=async()=>{
+  if(!current)return;
+  try{
+    await setDoc(ref(current),{service:$("service").value.trim(),statut:$("statut").value,acompte:$("acompte").value,miseAJour:new Date().toISOString()},{merge:true});
+    msg("Enregistré.");
+  }catch(e){msg("Erreur : "+e.code)}
+};
+</script>
+</body></html>
