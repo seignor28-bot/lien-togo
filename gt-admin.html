@@ -58,7 +58,7 @@
 <script type="module">
 import { auth, db, ENTREPRISE } from "./gt-config.js";
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
-import { doc, getDoc, collection, getDocs, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+import { doc, getDoc, setDoc, collection, getDocs, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 var msg = document.getElementById("msg");
 var connexion = document.getElementById("connexion");
@@ -93,6 +93,23 @@ function ligne(nom, valeur) {
   return d;
 }
 
+function ligneLien(nom, href, texte) {
+  var d = document.createElement("div");
+  d.className = "ligne";
+  var a = document.createElement("span");
+  a.textContent = nom;
+  var b = document.createElement("strong");
+  var lien = document.createElement("a");
+  lien.href = href;
+  lien.target = "_blank";
+  lien.rel = "noopener";
+  lien.textContent = texte;
+  b.appendChild(lien);
+  d.appendChild(a);
+  d.appendChild(b);
+  return d;
+}
+
 function ligneWhatsApp(tel) {
   var d = document.createElement("div");
   d.className = "ligne";
@@ -113,6 +130,15 @@ function ligneWhatsApp(tel) {
   d.appendChild(a);
   d.appendChild(b);
   return d;
+}
+
+function genCode() {
+  var a = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  var s = "";
+  var r = new Uint32Array(6);
+  crypto.getRandomValues(r);
+  for (var i = 0; i < r.length; i++) s += a[r[i] % a.length];
+  return "LT-" + s;
 }
 
 async function entrer() {
@@ -152,6 +178,37 @@ function carte(it) {
   bloc.appendChild(desc);
   if (c.devisMontant) {
     bloc.appendChild(ligne("Devis", c.devisMontant));
+  }
+
+  if (c.suiviCode) {
+    bloc.appendChild(ligne("Code de suivi", c.suiviCode));
+    var chiffres = String(c.telephone || "").replace(/[^0-9]/g, "");
+    if (chiffres.length >= 8) {
+      var texte = "Bonjour, voici votre code de suivi Groupe Lien Togo : " + c.suiviCode + ". Suivez votre commande sur https://seignor28-bot.github.io/lien-togo/suivi.html";
+      bloc.appendChild(ligneLien("Envoyer le code", "https://wa.me/" + chiffres + "?text=" + encodeURIComponent(texte), "Envoyer au client"));
+    }
+  } else {
+    var bsu = document.createElement("button");
+    bsu.textContent = "Créer le suivi";
+    bsu.onclick = async function () {
+      bsu.disabled = true;
+      var code = genCode();
+      try {
+        await setDoc(doc(db, "entreprises", ENTREPRISE, "suivis", code), {
+          service: String(c.service || "Commande").slice(0, 100),
+          statut: "Reçu",
+          acompte: "Non payé",
+          miseAJour: serverTimestamp()
+        });
+        await updateDoc(it.ref, { suiviCode: code });
+        dire("Suivi créé : " + code, "ok");
+        charger();
+      } catch (e) {
+        dire("Création du suivi impossible.", "erreur");
+        bsu.disabled = false;
+      }
+    };
+    bloc.appendChild(bsu);
   }
 
   var lm = document.createElement("label");
