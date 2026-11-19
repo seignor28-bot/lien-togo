@@ -52,7 +52,7 @@ button{background:#0a7d3b;color:#fff;border:0;border-radius:8px}
 import * as C from "./gt-config.js";
 import {initializeApp,getApps,getApp} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
 import {getAuth,signInWithEmailAndPassword} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
-import {getFirestore,doc,getDoc,setDoc} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+import {getFirestore,doc,getDoc,setDoc,serverTimestamp} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const cfg=C.firebaseConfig||C.config||C.default;
 const app=C.app||(getApps().length?getApp():initializeApp(cfg));
@@ -104,7 +104,7 @@ $("bCreer").onclick=async()=>{
   if(!service)return msg("Écris le service.");
   const c=gen();
   try{
-    await setDoc(ref(c),{service,statut:"Reçu",acompte:"Non payé",miseAJour:new Date().toISOString()});
+    await setDoc(ref(c),{service,statut:"Reçu",acompte:"Non payé",miseAJour:serverTimestamp()});
     saveCode(c);showList();$("code").value=c;$("nService").value="";
     await ouvrir();msg("Suivi créé : "+c+" (donne ce code au client)");
   }catch(e){msg("Erreur : "+e.code)}
@@ -113,7 +113,7 @@ $("bOuvrir").onclick=ouvrir;
 $("bSave").onclick=async()=>{
   if(!current)return;
   try{
-    await setDoc(ref(current),{service:$("service").value.trim(),statut:$("statut").value,acompte:$("acompte").value,miseAJour:new Date().toISOString()},{merge:true});
+    await setDoc(ref(current),{service:$("service").value.trim(),statut:$("statut").value,acompte:$("acompte").value,miseAJour:serverTimestamp()},{merge:true});
     msg("Enregistré.");
   }catch(e){msg("Erreur : "+e.code)}
 };
