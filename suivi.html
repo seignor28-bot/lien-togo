@@ -132,6 +132,7 @@ document.getElementById("voir").onclick = voir;
 champ.addEventListener("keydown", function (e) {
   if (e.key === "Enter") voir();
 });
-</script>
-</body>
-</html>
+
+var codeLien = new URLSearchParams(location.search).get("code");
+if (codeLien) {
+  champ.value = codeLien.t
