@@ -135,4 +135,9 @@ champ.addEventListener("keydown", function (e) {
 
 var codeLien = new URLSearchParams(location.search).get("code");
 if (codeLien) {
-  champ.value = codeLien.t
+  champ.value = codeLien.trim().toUpperCase();
+  voir();
+}
+</script>
+</body>
+</html>
